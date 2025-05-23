@@ -16,16 +16,40 @@ app = Flask(__name__)
 BUCKET_NAME = os.environ.get('GCS_BUCKET_NAME', 'weather-data-bucket')
 OPEN_METEO_BASE_URL = 'https://archive-api.open-meteo.com/v1/archive'
 
-# Initialize GCS client
-storage_client = storage.Client()
+# Global variable for storage client
+storage_client = None
+
+
+def get_storage_client():
+    """Get or create the GCS client with lazy initialization"""
+    global storage_client
+    if storage_client is None:
+        # Check if running in local development mode
+        if os.environ.get('DEVELOPMENT_MODE') == 'true':
+            logger.warning("Running in development mode - GCS operations will be mocked")
+            return None
+        try:
+            storage_client = storage.Client()
+        except Exception as e:
+            logger.error(f"Failed to initialize GCS client: {str(e)}")
+            if os.environ.get('MOCK_GCS') == 'true':
+                logger.info("Using mock GCS client")
+                return None
+            raise
+    return storage_client
 
 
 def get_bucket():
     """Get or create the GCS bucket"""
+    client = get_storage_client()
+    if client is None:
+        logger.info("Mock mode: Skipping bucket operations")
+        return None
+    
     try:
-        bucket = storage_client.bucket(BUCKET_NAME)
+        bucket = client.bucket(BUCKET_NAME)
         if not bucket.exists():
-            bucket = storage_client.create_bucket(BUCKET_NAME)
+            bucket = client.create_bucket(BUCKET_NAME)
             logger.info(f"Created bucket: {BUCKET_NAME}")
         return bucket
     except Exception as e:
@@ -124,11 +148,16 @@ def store_weather_data():
         
         # Store in GCS
         bucket = get_bucket()
-        blob = bucket.blob(filename)
-        blob.upload_from_string(
-            json.dumps(weather_data, indent=2),
-            content_type='application/json'
-        )
+        if bucket is None:
+            # Mock mode - just log the data
+            logger.info(f"Mock mode: Would store weather data with filename: {filename}")
+            logger.info(f"Mock mode: Weather data size: {len(json.dumps(weather_data))} bytes")
+        else:
+            blob = bucket.blob(filename)
+            blob.upload_from_string(
+                json.dumps(weather_data, indent=2),
+                content_type='application/json'
+            )
         
         logger.info(f"Successfully stored weather data: {filename}")
         
@@ -158,6 +187,15 @@ def list_weather_files():
     """List all weather data files in GCS bucket"""
     try:
         bucket = get_bucket()
+        if bucket is None:
+            # Mock mode - return empty list
+            logger.info("Mock mode: Returning empty file list")
+            return jsonify({
+                'files': [],
+                'count': 0,
+                'message': 'Running in mock mode - no files available'
+            }), 200
+        
         blobs = bucket.list_blobs()
         
         files = []
@@ -184,6 +222,23 @@ def get_weather_file_content(filename):
     """Get content of a specific weather data file from GCS"""
     try:
         bucket = get_bucket()
+        if bucket is None:
+            # Mock mode - return sample data
+            logger.info(f"Mock mode: Returning sample data for filename: {filename}")
+            return jsonify({
+                'filename': filename,
+                'message': 'Running in mock mode - sample data returned',
+                'data': {
+                    'latitude': 52.52,
+                    'longitude': 13.41,
+                    'daily': {
+                        'time': ['2023-01-01'],
+                        'temperature_2m_max': [5.0],
+                        'temperature_2m_min': [-2.0]
+                    }
+                }
+            }), 200
+        
         blob = bucket.blob(filename)
         
         if not blob.exists():

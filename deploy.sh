@@ -5,7 +5,7 @@
 # Set variables (replace with your actual values)
 PROJECT_ID="master-shell-460708-e0"
 SERVICE_NAME="weather-data-backend"
-REGION="us-central1"
+REGION="asia-south2"
 BUCKET_NAME="weather-data-bucket-$(date +%s)" # Unique bucket name
 
 # Colors for output

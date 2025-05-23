@@ -14,10 +14,10 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 
 # Make port 8080 available to the world outside this container
-EXPOSE 8080
+EXPOSE 8000
 
 # Define environment variable
-ENV PORT=8080
+ENV PORT=8000
 
 # Run the application using gunicorn
 CMD exec gunicorn --bind :$PORT --workers 1 --threads 8 --timeout 0 app:app
